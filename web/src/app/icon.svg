@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" ry="96" fill="#E8B931"/>
+  <g transform="translate(256,256)">
+    <!-- Printer body -->
+    <rect x="-130" y="-50" width="260" height="130" rx="18" fill="#1a1a2e"/>
+    <!-- Paper tray top (input) -->
+    <rect x="-90" y="-120" width="180" height="80" rx="8" fill="#1a1a2e"/>
+    <!-- Paper coming out of top tray -->
+    <rect x="-70" y="-140" width="140" height="50" rx="4" fill="#fff"/>
+    <!-- Paper output tray -->
+    <rect x="-100" y="60" width="200" height="16" rx="6" fill="#1a1a2e"/>
+    <!-- Output paper -->
+    <rect x="-75" y="50" width="150" height="60" rx="4" fill="#fff"/>
+    <!-- Printed lines on output paper -->
+    <rect x="-55" y="64" width="90" height="6" rx="2" fill="#ccc"/>
+    <rect x="-55" y="78" width="110" height="6" rx="2" fill="#ccc"/>
+    <rect x="-55" y="92" width="70" height="6" rx="2" fill="#ccc"/>
+    <!-- Status light -->
+    <circle cx="90" cy="-10" r="10" fill="#4ade80"/>
+  </g>
+</svg>

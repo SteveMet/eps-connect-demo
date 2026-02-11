@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { generateMockQuoteResponse } from "@/lib/mock-data";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const SIMULATION_STEPS = [
   { delay: 800, message: "Parsing your request..." },
