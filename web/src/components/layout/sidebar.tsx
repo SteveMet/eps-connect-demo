@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -47,6 +48,37 @@ interface SidebarProps {
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onNavigate?: () => void;
+}
+
+function ModelBadge() {
+  const [model, setModel] = useState<string | null>(null);
+
+  useEffect(() => {
+    setModel(sessionStorage.getItem("quoteModel"));
+  }, []);
+
+  // Extract short name: "anthropic/claude-sonnet-4.5" → "Claude Sonnet 4.5"
+  const shortName = model
+    ? model
+        .split("/")
+        .pop()!
+        .replace(/-/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase())
+    : null;
+
+  return (
+    <div className="flex items-center gap-2 rounded-md bg-sidebar-accent/50 px-3 py-2">
+      <div
+        className={cn(
+          "h-2 w-2 animate-pulse rounded-full",
+          shortName ? "bg-margin-green" : "bg-press-yellow"
+        )}
+      />
+      <span className="text-[11px] font-medium text-sidebar-foreground/60 truncate">
+        {shortName || "Simulation Mode"}
+      </span>
+    </div>
+  );
 }
 
 export function Sidebar({ collapsed, onCollapsedChange, onNavigate }: SidebarProps) {
@@ -144,15 +176,10 @@ export function Sidebar({ collapsed, onCollapsedChange, onNavigate }: SidebarPro
         </div>
       )}
 
-      {/* Simulation badge */}
+      {/* Mode badge */}
       {!collapsed && (
         <div className="border-t border-sidebar-border px-4 py-3">
-          <div className="flex items-center gap-2 rounded-md bg-sidebar-accent/50 px-3 py-2">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-press-yellow" />
-            <span className="text-[11px] font-medium text-sidebar-foreground/60">
-              Demo Mode
-            </span>
-          </div>
+          <ModelBadge />
         </div>
       )}
 

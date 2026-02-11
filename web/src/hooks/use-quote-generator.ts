@@ -14,6 +14,7 @@ interface UseQuoteGeneratorReturn {
   progress: number;
   totalSteps: number;
   result: QuoteResponse | null;
+  reasoning: string | null;
   error: string | null;
   generateQuote: (
     request: string,
@@ -43,6 +44,7 @@ export function useQuoteGenerator(): UseQuoteGeneratorReturn {
   const [progress, setProgress] = useState(0);
   const [totalSteps, setTotalSteps] = useState(10);
   const [result, setResult] = useState<QuoteResponse | null>(null);
+  const [reasoning, setReasoning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reset = useCallback(() => {
@@ -51,6 +53,7 @@ export function useQuoteGenerator(): UseQuoteGeneratorReturn {
     setStepMessage("");
     setProgress(0);
     setResult(null);
+    setReasoning(null);
     setError(null);
   }, []);
 
@@ -65,6 +68,7 @@ export function useQuoteGenerator(): UseQuoteGeneratorReturn {
       setStepMessage("Warming up the press...");
       setProgress(0);
       setResult(null);
+      setReasoning(null);
       setError(null);
 
       try {
@@ -114,7 +118,19 @@ export function useQuoteGenerator(): UseQuoteGeneratorReturn {
                 );
               } else if (event.type === "complete") {
                 if (event.data) {
+                  // Store to sessionStorage immediately before any
+                  // state updates or navigation can occur
+                  sessionStorage.setItem("quoteResult", JSON.stringify(event.data));
+                  if (event.reasoning) {
+                    sessionStorage.setItem("quoteReasoning", event.reasoning);
+                  }
+                  if (event.model) {
+                    sessionStorage.setItem("quoteModel", event.model);
+                  }
                   setResult(event.data);
+                  if (event.reasoning) {
+                    setReasoning(event.reasoning);
+                  }
                   setCurrentStep("complete");
                   setProgress((event.totalSteps || 10) + 1);
                 } else if (event.error) {
@@ -152,6 +168,7 @@ export function useQuoteGenerator(): UseQuoteGeneratorReturn {
     progress,
     totalSteps,
     result,
+    reasoning,
     error,
     generateQuote,
     reset,

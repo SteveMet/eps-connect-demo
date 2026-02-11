@@ -55,9 +55,9 @@ export default function NewQuotePage() {
   };
 
   // Navigate to results when we have data
+  // (sessionStorage is written in the hook before state updates)
   useEffect(() => {
     if (result && currentStep === "complete") {
-      sessionStorage.setItem("quoteResult", JSON.stringify(result));
       router.push("/quote/results");
     }
   }, [result, currentStep, router]);

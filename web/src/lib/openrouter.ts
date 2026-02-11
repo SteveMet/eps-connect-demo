@@ -1,11 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type { QuoteResponse } from "./types";
 import {
   loadPrintEstimatorPrompt,
   loadCompetitivePricerPrompt,
   loadFactoryProfile,
   loadMarketPricingDatabase,
 } from "./knowledge-base";
+
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const MODEL = "anthropic/claude-sonnet-4.5";
 
 const QUOTE_RESPONSE_SCHEMA = {
   customer_quote: {
@@ -146,41 +147,149 @@ export function buildSystemMessages(): Array<{ type: "text"; text: string }> {
   ];
 }
 
+export type StreamEvent =
+  | { type: "reasoning"; content: string }
+  | { type: "text"; content: string }
+  | { type: "done"; content: string; reasoning: string; model: string };
+
 export async function* streamQuoteGeneration(
   request: string,
   urgency: string,
   customerInfo?: { name?: string; company?: string; email?: string }
-): AsyncGenerator<{ type: "text" | "done"; content: string }> {
-  const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+): AsyncGenerator<StreamEvent> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENROUTER_API_KEY is not set");
+  }
 
-  const systemMessages = buildSystemMessages();
+  const systemBlocks = buildSystemMessages();
+  const systemMessage = systemBlocks.map((b) => b.text).join("\n\n---\n\n");
   const userMessage = buildUserMessage(request, urgency, customerInfo);
 
-  const stream = anthropic.messages.stream({
-    model: "claude-sonnet-4-5-20250929",
+  const requestBody = {
+    model: MODEL,
     max_tokens: 16000,
-    system: systemMessages,
+    stream: true,
+    reasoning: {
+      max_tokens: 8000,
+    },
+    provider: {
+      order: ["anthropic"],
+    },
     messages: [
-      {
-        role: "user",
-        content: userMessage,
-      },
+      { role: "system", content: systemMessage },
+      { role: "user", content: userMessage },
     ],
+  };
+
+  console.log("\n========== OPENROUTER REQUEST ==========");
+  console.log("Model:", MODEL);
+  console.log("Reasoning: max_tokens=8000");
+  console.log("System message length:", systemMessage.length, "chars");
+  console.log("User message length:", userMessage.length, "chars");
+  console.log("\n--- SYSTEM MESSAGE (first 2000 chars) ---");
+  console.log(systemMessage.slice(0, 2000));
+  console.log("\n--- USER MESSAGE ---");
+  console.log(userMessage);
+  console.log("========================================\n");
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://eps-connect-demo.vercel.app",
+      "X-Title": "AccuPrint Estimator",
+    },
+    body: JSON.stringify(requestBody),
   });
 
-  let fullText = "";
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `OpenRouter API error ${response.status}: ${errorBody}`
+    );
+  }
 
-  for await (const event of stream) {
-    if (
-      event.type === "content_block_delta" &&
-      event.delta.type === "text_delta"
-    ) {
-      fullText += event.delta.text;
-      yield { type: "text", content: event.delta.text };
+  if (!response.body) {
+    throw new Error("No response body from OpenRouter");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+  let fullReasoning = "";
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const lines = buffer.split("\n");
+    // Keep the last potentially incomplete line in the buffer
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+      const data = trimmed.slice(6);
+      if (data === "[DONE]") continue;
+
+      try {
+        const parsed = JSON.parse(data);
+        const delta = parsed.choices?.[0]?.delta;
+
+        // Log first few chunks to debug reasoning format
+        if (fullText.length === 0 && fullReasoning.length === 0) {
+          console.log("[SSE CHUNK] delta keys:", delta ? Object.keys(delta) : "no delta", "| raw:", JSON.stringify(parsed).slice(0, 300));
+        }
+
+        // Reasoning tokens arrive first (before content).
+        // Prefer reasoning_details (structured) over delta.reasoning (string)
+        // to avoid duplication — some models send both with the same text.
+        let gotReasoningDetail = false;
+        const reasoningDetails = delta?.reasoning_details;
+        if (reasoningDetails && Array.isArray(reasoningDetails)) {
+          for (const detail of reasoningDetails) {
+            if (detail.text) {
+              gotReasoningDetail = true;
+              fullReasoning += detail.text;
+              yield { type: "reasoning", content: detail.text };
+            }
+          }
+        }
+
+        // Only use the string field if we didn't get structured details
+        if (!gotReasoningDetail && delta?.reasoning) {
+          fullReasoning += delta.reasoning;
+          yield { type: "reasoning", content: delta.reasoning };
+        }
+
+        // Content tokens follow reasoning
+        const content = delta?.content;
+        if (content) {
+          fullText += content;
+          yield { type: "text", content };
+        }
+      } catch {
+        // Skip malformed SSE chunks
+      }
     }
   }
 
-  yield { type: "done", content: fullText };
+  console.log("\n========== OPENROUTER RESPONSE ==========");
+  console.log("Reasoning length:", fullReasoning.length, "chars");
+  console.log("Response length:", fullText.length, "chars");
+  if (fullReasoning) {
+    console.log("\n--- MODEL REASONING ---");
+    console.log(fullReasoning);
+  }
+  console.log("\n--- FULL MODEL OUTPUT ---");
+  console.log(fullText);
+  console.log("=========================================\n");
+
+  yield { type: "done", content: fullText, reasoning: fullReasoning, model: MODEL };
 }
